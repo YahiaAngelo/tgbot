@@ -1,4 +1,6 @@
 import re
+import schedule
+import time
 from io import BytesIO
 from typing import Optional, List
 
@@ -125,6 +127,51 @@ def hash_get(bot: Bot, update: Update):
     fst_word = message.split()[0]
     no_hash = fst_word[1:]
     get(bot, update, no_hash, show_none=False)
+
+@run_async
+@user_admin
+def remind(bot: Bot, update: Update):
+    chat_id = update.effective_chat.id
+    chat = update.effective_chat
+    msg = update.effective_message  # type: Optional[Message]
+    chat_name = chat.title or chat.first or chat.username
+    note_name, text, data_type, content, buttons = get_note_type(msg)
+
+    if data_type is None:
+        msg.reply_text("Dude, there's no note")
+        return
+
+    if len(text.strip()) == 0:
+        msg.reply_text("Dude, there's no note")
+        return
+
+
+
+    msg.reply_text("Okie, I'll remind you about that after "+note_name+" hours.")
+
+    if msg.reply_to_message and msg.reply_to_message.from_user.is_bot:
+        if text:
+            msg.reply_text("Seems like you're trying to save a message from a bot. Unfortunately, "
+                           "bots can't forward bot messages, so I can't save the exact message. "
+                           "\nI'll save all the text I can, but if you want more, you'll have to "
+                           "forward the message yourself, and then save it.")
+        else:
+            msg.reply_text("Bots are kinda handicapped by telegram, making it hard for bots to "
+                           "interact with other bots, so I can't save this message "
+                           "like I usually would - do you mind forwarding it and "
+                           "then saving that new message? Thanks!")
+        return
+
+    def remind(note):
+        msg.reply_text("Yo, remember this?")
+        msg.reply_text(note)
+        return schedule.CancelJob
+
+    schedule.every(int(note_name)).hours.do(remind, note=text)
+
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
 
 
 @run_async
@@ -255,6 +302,7 @@ A button can be added to a note by using standard markdown link syntax - the lin
 `buttonurl:` section, as such: `[somelink](buttonurl:example.com)`. Check /markdownhelp for more info.
  - /save <notename>: save the replied message as a note with name notename
  - /clear <notename>: clear note with this name
+ - /remind <time in hours>: bot will remind you about the replied message after <time in hours>
  
  An example of how to save a note would be via:
 `/save data This is some data!`
@@ -274,12 +322,14 @@ GET_HANDLER = CommandHandler("get", cmd_get, pass_args=True)
 HASH_GET_HANDLER = RegexHandler(r"^#[^\s]+", hash_get)
 
 SAVE_HANDLER = CommandHandler("save", save)
+REMINDER_HANDLER = CommandHandler("remind", remind)
 DELETE_HANDLER = CommandHandler("clear", clear, pass_args=True)
 
 LIST_HANDLER = DisableAbleCommandHandler(["notes", "saved"], list_notes, admin_ok=True)
 
 dispatcher.add_handler(GET_HANDLER)
 dispatcher.add_handler(SAVE_HANDLER)
+dispatcher.add_handler(REMINDER_HANDLER)
 dispatcher.add_handler(LIST_HANDLER)
 dispatcher.add_handler(DELETE_HANDLER)
 dispatcher.add_handler(HASH_GET_HANDLER)
